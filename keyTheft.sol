@@ -1,4 +1,4 @@
-pragma solidity ^0.5.1;
+pragma solidity ^0.6.6;
 
 contract KeyTheft{
     
@@ -20,6 +20,9 @@ contract KeyTheft{
         state = "waiting";
     }
     
+    receive() external payable { }
+    
+    //modifier for allowing calling of certainf functions only by owner
     modifier checkOwner() { // Modifier
         require(
             msg.sender == owner,
@@ -51,21 +54,49 @@ contract KeyTheft{
         reward = modifiedReward;
     }
     
-    function initTheft(uint _reward) public {
+    function initTheft(uint _reward) payable public {
+        require(msg.value == _reward);
+        payable(address(this)).transfer(msg.value);
         state = "init";
         reward = _reward;
         yC = 130018;
         pkV = 183450;
+        
+    }
+    
+    function calculateTrapdoor(uint r, uint w) private returns (uint256){
+        uint256 trapdoor1 = modExp(generator, w, p_schnorr);
+        uint256 trapdoor2 = modExp(yC, r, p_schnorr);
+        return (trapdoor1%p_schnorr*trapdoor2%p_schnorr)%p_schnorr;
+    }
+    
+    function calculateResponseElement(uint generator, uint response) private returns (uint256){
+        uint256 responseElement = modExp(generator, response, p_schnorr);
+        return responseElement;
+    }
+    
+    function calculateChallengeElement(uint trapDoorValue, uint commit, uint w) private returns (uint256){
+        uint256 challenge = (trapDoorValue%p_schnorr + commit%p_schnorr)%p_schnorr;
+        uint256 challengeExponentiation = modExp(pkV, challenge + w, p_schnorr);
+        uint256 challengeElement = (commit%p_schnorr*challengeExponentiation%p_schnorr)%p_schnorr;
+        return challengeElement;
     }
 
     function claimSecretKey(uint r, uint w, uint commit, uint response) public{
-        uint256 trapdoor1 = modExp(generator, w, p_schnorr);
-        uint256 trapdoor2 = modExp(yC, r, p_schnorr);
-        uint256 trapDoorValue= (trapdoor1%p_schnorr*trapdoor2%p_schnorr)%p_schnorr;
-        uint256 challenge = (trapDoorValue%p_schnorr + commit%p_schnorr)%p_schnorr;
-        uint256 responseElement = modExp(generator, response, p_schnorr);
-        uint256 challengeExponentiation = modExp(pkV, challenge + w, p_schnorr);
-        uint256 challengeElement = (commit%p_schnorr*challengeExponentiation%p_schnorr)%p_schnorr;
+        
+        //Check for initialisation of challenge
+        require(keccak256(abi.encodePacked(state)) == keccak256(abi.encodePacked("init")));
+        //Compute trapdoor value
+        uint256 trapDoorValue = calculateTrapdoor(r, w);
+        
+        //Compute response elemente which is g^reponse
+        uint256 responseElement = calculateResponseElement(generator, response);
+        
+        //Compute challengeElement which is commit*yV^(w + challenge)
+        uint256 challengeElement = calculateChallengeElement(trapDoorValue, commit, w);
+        
         require(responseElement == challengeElement);
+        payable(msg.sender).transfer(reward);
+        state = "done";
     }
 }
