@@ -59,6 +59,12 @@ contract LeakageOfSecret{
         donationsReceived = 0;
         t_end = _t_end;
     }
+
+    //For Testing purposes
+    function setTendAsCurrentTime() public checkLeaker(){
+        t_end = block.timestamp;
+    }
+
     function testEncodeing() public{
         uint256 no = 50661;
         uint256 enc = uint(keccak256(abi.encodePacked(no)));
@@ -96,7 +102,10 @@ contract LeakageOfSecret{
       
       //Update total received donation
       donationsReceived += msg.value;
-    
+
+      //Update the users donations
+      userDonations[msg.sender] += msg.value;
+      
       if(donationsReceived >= minRequiredDonations){
           state = "readyForReveal";
       }
@@ -109,7 +118,7 @@ contract LeakageOfSecret{
         
         //Ensure state is correct
         require(keccak256(abi.encodePacked(state)) == keccak256("readyForReveal"));
-
+        
         for(uint i = 0;i < keys.length;i+=1){
             require(uint(keccak256(abi.encodePacked(keys[i]))) == key_hashes[i]);
         }
@@ -120,17 +129,28 @@ contract LeakageOfSecret{
     }
     
     function withdraw(uint256 _amountToWithdraw) public{
+      
         require(block.timestamp > t_end);
-        require(userDonations[msg.sender] > _amountToWithdraw);
-        
+        require(userDonations[msg.sender] >= _amountToWithdraw);
+
+        //Allow withdraw only if keys have not been revealed
+        require(keccak256(abi.encodePacked(state)) == keccak256("readyForReveal"));
+
          //Transfer donations to donator
         bool transfered = payable(msg.sender).send(donationsReceived);
         
+        //Update user map only if transfered
         if(transfered){
             userDonations[msg.sender] -= _amountToWithdraw;
+            donationsReceived -= _amountToWithdraw;
+
+            //Update state of contract if required
+            if(donationsReceived < minRequiredDonations){
+                state = "sampleRevealed";
+            }
+
         }   
     }
-
     function getState() public view returns(string memory){
         return state;
     }

@@ -1,4 +1,4 @@
-pragma solidity ^0.6.6;
+pragma solidity ^0.8.10;
 
 contract KeyTheft{
     
@@ -20,6 +20,7 @@ contract KeyTheft{
         state = "waiting";
     }
     
+    //Function to allow payment to contract
     receive() external payable { }
     
     //modifier for allowing calling of certainf functions only by owner
@@ -31,7 +32,7 @@ contract KeyTheft{
         _;
     }
     
-    
+    //Function for fast modular exponentitation
     function modExp(uint256 _a, uint256 _b, uint256 _m) public returns (uint256 result) {
         if(_b == 0){
             return 1;
@@ -50,24 +51,31 @@ contract KeyTheft{
         }
     }
     
+    //Function allowing owner to modify rewards with time
     function changeReward(uint modifiedReward) public checkOwner(){
         reward = modifiedReward;
     }
     
-    function initTheft(uint _reward) payable public {
+    //Function fot the owner to init the theft
+    function initTheft(uint _reward, uint _yC, uint _pkV) payable checkOwner() public {
         require(msg.value == _reward);
         payable(address(this)).transfer(msg.value);
         state = "init";
         reward = _reward;
-        yC = 130018;
-        pkV = 183450;
+        yC = _yC;
+        pkV = _pkV;
         
     }
     
+
     function calculateTrapdoor(uint r, uint w) private returns (uint256){
+        //Calculate the parts of the trapdoor function
         uint256 trapdoor1 = modExp(generator, w, p_schnorr);
         uint256 trapdoor2 = modExp(yC, r, p_schnorr);
-        return (trapdoor1%p_schnorr*trapdoor2%p_schnorr)%p_schnorr;
+
+        //Calculate hashvalue from parts
+        uint256 hashValue = uint256(keccak256(abi.encodePacked(trapdoor1, trapdoor2)));
+        return hashValue;
     }
     
     function calculateResponseElement(uint generator, uint response) private returns (uint256){
@@ -98,5 +106,10 @@ contract KeyTheft{
         require(responseElement == challengeElement);
         payable(msg.sender).transfer(reward);
         state = "done";
+    }
+
+    //Function to get the current state of the contract
+    function getState() public view returns(string memory){
+        return state;
     }
 }
